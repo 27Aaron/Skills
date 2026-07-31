@@ -1,16 +1,3 @@
 __pycache__/
 *.pyc
 *.pyo
-
-# Butian local workspace
-.butian/
-docs/butian/*/security-report.md
-docs/butian/*/security-report.html
-docs/butian/*/security-report-final.md
-docs/butian/*/security-report-final.html
-
-# Local agent planning artifacts
-docs/superpowers/
-
-# Local Claude Code permissions
-.claude/settings.local.json
