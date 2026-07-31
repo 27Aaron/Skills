@@ -1,11 +1,17 @@
 ---
 name: git-commit
-description: Create Git commits with Conventional Commit messages by inspecting changes, grouping related files, staging the intended set, and generating a concise message. Use when the user asks to commit changes, create a commit, or generate or rewrite a commit message from repository changes. Only mutate the repository when the user explicitly asks to commit.
+description: Create or draft Conventional Commit messages from repository changes. Use for committing changes, writing or rewriting commit messages, choosing type, scope, or breaking-change markers, and fixing commitlint message errors. Stage or commit only when explicitly requested.
 ---
 
 # Git Commit with Conventional Commits
 
 Analyze the actual changes and create a clear, focused commit using [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). Follow repository-specific instructions and commitlint rules when present.
+
+## Decide the Action
+
+- Treat requests to write, generate, rewrite, suggest, or review a commit message as message-only. Inspect read-only state when useful, then return the proposed message without staging or committing.
+- Execute a commit only when the user explicitly asks to commit, create the commit, or otherwise save the changes in Git.
+- Default ambiguous requests to message-only rather than mutating the repository.
 
 ## Format
 
@@ -45,27 +51,37 @@ git diff --staged
 git diff
 ```
 
-Use the staged diff when it is non-empty. Otherwise, inspect the working-tree diff. Check recent commits or repository configuration when needed to match established language, scopes, and style.
+Always inspect both staged and unstaged state. Treat partially staged files as separate snapshots.
+
+- When staged changes exist, use the staged diff as the commit source of truth while accounting for any unstaged changes that will remain.
+- When nothing is staged, use the working-tree diff to plan a logical commit.
+- Check applicable repository instructions, commitlint configuration, and recent commit subjects when needed to match established language, scopes, and style.
 
 ### 2. Stage a Logical Change
 
-Stage files or hunks only for an explicit commit request. Keep one logical change per commit and avoid unrelated files. After staging, inspect `git diff --staged` again and base the message only on that snapshot.
+Stage files or hunks only for an explicit commit request. Keep one logical change per commit and avoid unrelated files.
 
 ```bash
 git add path/to/file
 git add -p
+git diff --staged --check
+git diff --staged
 ```
 
-Never stage secrets or private keys. Inspect credential and environment files carefully before including them.
+- Preserve an existing staged snapshot; do not add unstaged changes unless the user's request includes them.
+- When the user explicitly asks to commit all current changes, inspect them first, then stage all intended files.
+- Never stage secrets or private keys. Inspect credential and environment files carefully without exposing sensitive values.
+- After staging, run the staged diff checks above and base the message only on that exact snapshot.
 
 ### 3. Generate the Message
 
-- Choose the type from the change's primary intent.
+- Choose the type from the user-visible outcome, not merely from the kinds of files changed.
+- Prefer a specific type over `chore`; use `chore` only when no more precise type applies.
 - Use a scope only when the affected component is clear.
 - Write a specific, imperative description such as `add`, `fix`, or `remove`.
 - Follow repository language and rules; otherwise match the user's language.
-- Keep the header concise. Prefer at most 72 characters when the repository defines no limit.
-- Add a body only when the reason or impact is not clear from the header.
+- Keep the header concise and avoid a trailing period. Prefer at most 72 characters when the repository defines no limit.
+- Add a body only when the reason, context, or impact is not clear from the header; do not repeat a file list.
 - Do not invent issue references, reviewers, co-authors, or sign-offs.
 
 For breaking changes, add `!` before `:` and/or a `BREAKING CHANGE:` footer. When using only `!`, describe what breaks in the header.
@@ -80,14 +96,21 @@ BREAKING CHANGE: use the v2 search endpoint instead
 
 Run `git commit` only when the user explicitly asks to commit. Pass the complete message through stdin with `git commit --file=-` or another argv-safe interface; do not interpolate generated text into a shell command.
 
-Allow hooks to run. If a hook fails, fix the cause and retry; do not bypass it automatically. Verify the result with:
+Allow hooks to run; do not bypass them automatically. If a hook fails:
+
+- Inspect the hook output and `git status --short`.
+- Fix and retry only when the cause is within the intended change.
+- Reinspect the staged diff when a hook modifies files; never restage blindly.
+- Stop and report failures involving unrelated files, expanded scope, or missing authority.
+
+Verify the result with:
 
 ```bash
 git status --short
-git log -1 --oneline
+git log -1 --format='%H%n%s'
 ```
 
-Report the commit hash and subject.
+Report the commit hash and subject, plus any changes still left staged or unstaged.
 
 ## Safety
 
@@ -95,4 +118,3 @@ Report the commit hash and subject.
 - Never use `--no-verify`, destructive commands, or history rewriting unless explicitly requested.
 - Never force-push `main` or `master`; do not force-push another branch unless explicitly requested.
 - Never push merely because the user asked to commit.
-- For a message-only request, return the message without staging or committing.
